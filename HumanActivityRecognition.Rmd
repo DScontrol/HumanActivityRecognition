@@ -1,0 +1,189 @@
+---
+title: "Human Activity Recognition"
+author: "Alex M."
+date: "1/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+
+The goal of this project is to predict the manner in which users of devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* did exercise.
+
+The data collected from accelerometers on the belt, forearm, arm, and dumbell of  6 participants, who perform barbell lifts correctly and incorrectly, allow us to analyze how well they did the exercise.
+
+
+## Loading the data
+
+First, we are going to load the data:
+
+* The training data: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+We are going to use this training data set for fitting our models and choose the best algorithm.
+  
+* The test data : https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+We are going to use this data set for making a prediction based on the results of chosen model. 
+```{r load data, echo=TRUE}
+library(dplyr)
+library(corrplot)
+library(caret)
+library(randomForest)
+library(naniar)
+set.seed(123)
+
+#LOADING DATA
+URLtrain<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+URLtest<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training<-read.csv(URLtrain)
+testing<-read.csv(URLtest)
+
+dim(training)
+dim(testing)
+```
+
+As we can see we have a training data set with 19622 observations and 160 variables(including the class), and a testing data set of 20 observations and 160 variables, but now, we observe we don't have the class variable instead we have an identification variable (problem_id), so we are going to predict the class.
+
+## Partitioning the data
+
+Now we are going to separate the training data set in two parts, one with the 70% of the data to fit our model, and the rest (30%) to evaluate the performance of the model.
+```{r data partition, echo=TRUE}
+
+#dataset partition
+dataindex <- createDataPartition(training$classe, p=0.7, list=FALSE)
+traindata <- training[dataindex, ]
+testdata <- training[-dataindex, ]
+
+```
+
+## Basic Exploratory Data Analysis
+
+Next, we are going to do some basic explorations in the data sets
+```{r exploratory analysis, echo=TRUE }
+#Data sets dimensions
+dim(traindata)
+dim(testdata)
+
+#Let's look at the values of class variable that indicates how well the exercise is done
+unique(traindata$classe)
+
+#look at data set structure
+str(traindata)
+```
+As we can see, there are many variables with NAs and empty values.
+
+### NAs and near zero variance Analysis 
+
+First, we are going to analyze the data with near zero variance...
+```{r NZV, echo=TRUE }
+#exclude the near zero variance
+NZV<-nearZeroVar(traindata)
+length(NZV)
+```
+As we can see, we have a lot of variables with variance near zero. That variables represent noisy information, so we can remove it from the train and test data sets...
+```{r NZV exclude, echo=TRUE }
+#exclude the near zero variance
+traindata2<-traindata[,-NZV]
+testdata2<-testdata[,-NZV]
+dim(traindata2)
+dim(testdata2)
+```
+Now we arre going to analyze the variables with most part of the data are NAs...
+```{r NAs, echo=TRUE }
+#we have to analyze NAs and remove the ones with mostly NA
+MostlyNA<-apply(is.na(traindata2), 2, mean)>0.95
+sum(MostlyNA)
+```
+Like we did with previously, we can remove that variables from our data sets...
+```{r NAs exclude, echo=TRUE }
+#removing mostly NAs variables
+traindata3<-traindata2[, MostlyNA==FALSE]
+testdata3<-testdata2[,MostlyNA==FALSE]
+dim(traindata3)
+dim(testdata3)
+```
+Finally we can exclude form our data set the first five variables (X, user_name...), because don't bring useful information for fitting our model...
+```{r excluding vars, echo=TRUE }
+#removing the first five vars
+
+#removing from training data set
+traindata4<-select(traindata3,-X,-user_name,-raw_timestamp_part_1,-raw_timestamp_part_2,-cvtd_timestamp)
+
+#removing from test data set
+testdata4<-select(testdata3,-X,-user_name,-raw_timestamp_part_1,-raw_timestamp_part_2,-cvtd_timestamp)
+
+#final dimensions
+dim(traindata4)
+dim(testdata4)
+
+#Summary with missing values
+pct_miss(traindata4) 
+pct_miss(testdata4) 
+```
+Finally we have a data sets with 54 variables, and the percentage of missing value in data is zero.
+
+For further analysis we can make a study of how highly correlated the variables are for making other data sets for better predictions.
+```{r correlation analysis, echo=TRUE }
+corrplot(cor(select(traindata4,-classe)), order = "hclust",type = "upper")
+```
+
+## Machine Learning Algorythm
+
+Next we are going to fit two models with two different machine learning algorithms:
+
+* Random Forest
+* Generalized Boosted
+
+In both cases we are using cross-validation methods.
+
+Finally, we will choose the algorithm with better performance and we will use it to predict the result in the testing data set
+
+### Random Forest
+```{r RF model, echo=TRUE, cache=TRUE }
+#Converting the class variable to factor
+traindata4$classe<-factor(traindata4$classe)
+testdata4$classe<-factor(testdata4$classe)
+
+#RANDOMFOREST + CV
+set.seed(123)
+kFolds <- trainControl(method = "cv", number = 10)
+modFitRF<- train(classe ~ ., data=traindata4, method="rf",trControl=kFolds)
+modFitRF$finalModel
+```
+We observe that the obtained classification is   we have a
+
+```{r RF prediction , echo=TRUE }
+#prediction on Test dataset
+predictRF <- predict(modFitRF, newdata=testdata4)
+
+#Confusion Matrix
+confMatRF <- confusionMatrix(predictRF, testdata4$classe)
+confMatRF
+
+```
+
+Cconclusion RF here
+
+### Generalized Boosted
+```{r GB model, echo=TRUE, cache=TRUE  }
+#PREDICTION GENERALIZED BOOSTED with CV
+set.seed(123)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=traindata4, method = "gbm",trControl = controlGBM, verbose = FALSE)
+modFitGBM$finalModel
+```
+
+```{r GB prediction, echo=TRUE }
+# prediction on Test dataset
+predictGBM <- predict(modFitGBM, newdata=testdata4)
+confMatGBM <- confusionMatrix(predictGBM, testdata4$classe)
+confMatGBM
+```
+### Predictions and Sample Error Analysis
+
+## Final Conclusions
+
+
