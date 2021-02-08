@@ -1,7 +1,7 @@
 ---
 title: "Human Activity Recognition"
 author: "Alex M."
-date: "1/26/2021"
+date: "2/8/2021"
 output: html_document
 ---
 
@@ -83,7 +83,7 @@ First, we are going to analyze the data with near zero variance...
 NZV<-nearZeroVar(traindata)
 length(NZV)
 ```
-As we can see, we have a lot of variables with variance near zero. That variables represent noisy information, so we can remove it from the train and test data sets...
+As we can see, we have a lot of variables with variance near zero. This variables represent noisy information, so we can remove it from the train and test data sets...
 ```{r NZV exclude, echo=TRUE }
 #exclude the near zero variance
 traindata2<-traindata[,-NZV]
@@ -91,13 +91,13 @@ testdata2<-testdata[,-NZV]
 dim(traindata2)
 dim(testdata2)
 ```
-Now we arre going to analyze the variables with most part of the data are NAs...
+Now we are going to analyze the variables with most part of the data are NAs...
 ```{r NAs, echo=TRUE }
 #we have to analyze NAs and remove the ones with mostly NA
 MostlyNA<-apply(is.na(traindata2), 2, mean)>0.95
 sum(MostlyNA)
 ```
-Like we did with previously, we can remove that variables from our data sets...
+Like we did with previously, we can remove this variables from our data sets...
 ```{r NAs exclude, echo=TRUE }
 #removing mostly NAs variables
 traindata3<-traindata2[, MostlyNA==FALSE]
@@ -105,7 +105,7 @@ testdata3<-testdata2[,MostlyNA==FALSE]
 dim(traindata3)
 dim(testdata3)
 ```
-Finally we can exclude form our data set the first five variables (X, user_name...), because don't bring useful information for fitting our model...
+Finally, we can exclude the first five variables (X, user_name...) from our data set, because they don't bring useful information for fitting our model...
 ```{r excluding vars, echo=TRUE }
 #removing the first five vars
 
@@ -127,21 +127,23 @@ Finally we have a data sets with 54 variables, and the percentage of missing val
 
 For further analysis we can make a study of how highly correlated the variables are for making other data sets for better predictions.
 ```{r correlation analysis, echo=TRUE }
-corrplot(cor(select(traindata4,-classe)), order = "hclust",type = "upper")
+corrplot(cor(select(traindata4,-classe)), order = "FPC",type = "upper",tl.cex = 0.8, tl.col = rgb(0, 0, 0))
 ```
 
-## Machine Learning Algorythm
+## Machine Learning Algorythms
 
-Next we are going to fit two models with two different machine learning algorithms:
+Next, we are going to fit two models with two different machine learning algorithms:
 
 * Random Forest
 * Generalized Boosted
 
 In both cases we are using cross-validation methods.
 
-Finally, we will choose the algorithm with better performance and we will use it to predict the result in the testing data set
+Finally, we will choose the algorithm with better performance and we will use it to predict the class in the testing data set.
 
 ### Random Forest
+
+First, we are going to fit a model using the Random Forest with cross-validation algorithm... 
 ```{r RF model, echo=TRUE, cache=TRUE }
 #Converting the class variable to factor
 traindata4$classe<-factor(traindata4$classe)
@@ -151,10 +153,14 @@ testdata4$classe<-factor(testdata4$classe)
 set.seed(123)
 kFolds <- trainControl(method = "cv", number = 10)
 modFitRF<- train(classe ~ ., data=traindata4, method="rf",trControl=kFolds)
-modFitRF$finalModel
+modFitRF
 ```
-We observe that the obtained classification is   we have a
+We observe that we obtain a very high accuracy and Kappa values, and we get the maximum  accuracy when the number of variables randomly sampled as candidates at each split is 27...
+```{r RF plot, echo=TRUE, cache=TRUE }
+plot(modFitRF)
+```
 
+Next, we are going to make a prediction with the test data set partition...
 ```{r RF prediction , echo=TRUE }
 #prediction on Test dataset
 predictRF <- predict(modFitRF, newdata=testdata4)
@@ -162,19 +168,24 @@ predictRF <- predict(modFitRF, newdata=testdata4)
 #Confusion Matrix
 confMatRF <- confusionMatrix(predictRF, testdata4$classe)
 confMatRF
-
 ```
-
-Cconclusion RF here
+As we can see in the confusion matrix, we have only 12 observations incorrectly classified, so we have a very high accuracy and a Kappa value near 1.
 
 ### Generalized Boosted
+
+Now, we are going to fit anothe model using the Generalized Boosted with cross-validation algorithm 
 ```{r GB model, echo=TRUE, cache=TRUE  }
 #PREDICTION GENERALIZED BOOSTED with CV
 set.seed(123)
 controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
 modFitGBM  <- train(classe ~ ., data=traindata4, method = "gbm",trControl = controlGBM, verbose = FALSE)
-modFitGBM$finalModel
+modFitGBM
 ```
+We observe that we obtain a very high accuracy and Kappa values with 150 trees and 3 iterations in depth....
+```{r GB plot, echo=TRUE, cache=TRUE }
+plot(modFitGBM)
+```
+
 
 ```{r GB prediction, echo=TRUE }
 # prediction on Test dataset
@@ -182,8 +193,32 @@ predictGBM <- predict(modFitGBM, newdata=testdata4)
 confMatGBM <- confusionMatrix(predictGBM, testdata4$classe)
 confMatGBM
 ```
-### Predictions and Sample Error Analysis
+As we can see in the confusion matrix, we have 59 observations incorrectly classified,a high accuracy and a Kappa value near 1.
 
 ## Final Conclusions
 
+Now we can compare the accuracy and kappa values we have obtained in each model. The kappa coefficient measures the agreement between classification and truth values. So a kappa value near of 1 (or 100%) represents perfect agreement.
 
+First we observe that the Random Forest model has a very high accuracy and kappa values...
+```{r RF Accury plot, echo=TRUE }
+plot(confMatRF$table, col = confMatRF$byClass, main = paste("Random Forest - Accuracy =",round(confMatRF$overall['Accuracy']*100, 2),"%"))
+
+plot(confMatRF$table, col = confMatRF$byClass, main = paste("Random Forest - Kappa =",round(confMatRF$overall['Kappa']*100, 2),"%"))
+```
+
+Lets see now the values obtained with the Generalized Boosted model...
+```{r GB Accury plot, echo=TRUE }
+plot(confMatGBM$table, col = confMatGBM$byClass, main = paste("Generalized Boosted - Accuracy =",round(confMatGBM$overall['Accuracy']*100, 2),"%"))
+
+plot(confMatGBM$table, col = confMatGBM$byClass, main = paste("Generalized Boosted - Kappa =",round(confMatGBM$overall['Kappa']*100, 2),"%"))
+```
+
+We can conclude that the Random Forest model has a better performance than the Generalized Boosted model with higher accuracy and Kappa values.  
+
+## Final Prediction
+
+Finally we are going to predict the class of the testing data set using the Random Forest fitted model
+```{r Final testing prediction, echo=TRUE }
+predictTesting <- predict(modFitRF, newdata=testing)
+predictTesting
+```
